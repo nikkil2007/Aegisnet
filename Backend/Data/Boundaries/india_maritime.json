@@ -1,0 +1,28 @@
+
+
+{
+    india_sri_lanka_boundary {
+        type LineString,
+        coordinates [
+            [79.5, 9.0],
+            [79.8, 9.5],
+            [80.1, 10.0],
+            [80.3, 10.5],
+            [80.5, 11.0]
+        ],
+        buffer_km 5
+    },
+    india_pakistan_boundary {
+        type LineString,
+        coordinates [
+            [68.0, 23.0],
+            [68.5, 23.5],
+            [69.0, 24.0]
+        ],
+        buffer_km 5
+    },
+    territorial_waters {
+        description 12 nautical miles from coast,
+        distance_nm 12
+    }
+}
