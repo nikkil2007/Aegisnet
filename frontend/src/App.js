@@ -1,13 +1,12 @@
-// frontend/src/App.js
-
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import axios from 'axios';
 import Map from './components/Map';
-import DriftCone from './components/DriftCone';
 import HazardPanel from './components/HazardPanel';
 import RouteSelector from './components/RouteSelector';
 import Navigation from './components/Navigation';
-import axios from 'axios';
 import './App.css';
+
+const API_URL = 'http://localhost:5000';
 
 function App() {
   const [vesselPosition, setVesselPosition] = useState({
@@ -16,45 +15,44 @@ function App() {
   });
   
   const [prediction, setPrediction] = useState(null);
-  const [hazards, setHazards] = useState(null);
-  const [escapeRoutes, setEscapeRoutes] = useState(null);
+  const [risks, setRisks] = useState(null);
   const [selectedRoute, setSelectedRoute] = useState(null);
   const [isNavigating, setIsNavigating] = useState(false);
-  
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   
-  // Run prediction
   const runPrediction = async () => {
     setLoading(true);
+    setError(null);
     
     try {
-      const response = await axios.post('http://localhost:5000/api/predict', {
+      console.log('Calling API...');
+      
+      const response = await axios.post(`${API_URL}/api/predict`, {
         lat: vesselPosition.lat,
         lon: vesselPosition.lon,
-        vessel_type: 'fishing_boat',
-        vessel_specs: {
-          max_speed: 15,
-          fuel_per_km: 0.5
-        }
+        duration_hours: 48,
+        engine_on: false
       });
       
+      console.log('API Response:', response.data);
+      
       setPrediction(response.data.prediction);
-      setHazards(response.data.hazards);
-      setEscapeRoutes(response.data.escape_routes);
-    } catch (error) {
-      console.error('Prediction error:', error);
+      setRisks(response.data.risks);
+      
+    } catch (err) {
+      console.error('Prediction error:', err);
+      setError(err.response?.data?.message || 'Failed to connect to backend. Make sure the Flask server is running on http://localhost:5000');
     }
     
     setLoading(false);
   };
   
-  // Update vessel position (simulated GPS)
   const updatePosition = (lat, lon) => {
     setVesselPosition({ lat, lon });
   };
   
-  // Start navigation with selected route
-  const startNavigation = (route) => {
+  const selectRoute = (route) => {
     setSelectedRoute(route);
     setIsNavigating(true);
   };
@@ -80,19 +78,24 @@ function App() {
             disabled={loading}
             className="predict-button"
           >
-            {loading ? 'Predicting...' : 'Run Drift Prediction'}
+            {loading ? '🔄 Predicting...' : '🎯 Run Drift Prediction'}
           </button>
+          
+          {error && (
+            <div className="error">
+              <strong>❌ Error:</strong> {error}
+            </div>
+          )}
         </div>
         
         <div className="sidebar">
-          {hazards && (
-            <HazardPanel hazards={hazards} />
+          {risks && (
+            <HazardPanel risks={risks} />
           )}
           
-          {escapeRoutes && !isNavigating && (
+          {!isNavigating && risks && risks.total_risk_score > 50 && (
             <RouteSelector 
-              routes={escapeRoutes}
-              onSelectRoute={startNavigation}
+              onSelectRoute={selectRoute}
             />
           )}
           
