@@ -2,7 +2,11 @@
 AEGISNET 2.0 - Complete Flask API
 All features: location validation, route optimization, vessel learning
 """
+# Add after imports
+from backend.demo_scenarios import DemoScenarios
 
+# Add global flag
+DEMO_MODE = True  # Set to False for production
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from datetime import datetime
@@ -90,11 +94,7 @@ def validate_location():
 def predict():
     """
     COMPLETE PREDICTION ENDPOINT
-    - Validates location
-    - Runs drift prediction
-    - Assesses all hazards
-    - Computes escape routes if needed
-    - Learns vessel characteristics
+    NOW WITH DEMO MODE SUPPORT
     """
     try:
         data = request.json
@@ -105,9 +105,10 @@ def predict():
         vessel_id = data.get('vessel_id', 'default')
         
         print(f"\n{'='*60}")
-        print(f"📍 FULL PREDICTION REQUEST")
+        print(f"📍 PREDICTION REQUEST")
         print(f"   Position: {lat}°N, {lon}°E")
         print(f"   Vessel ID: {vessel_id}")
+        print(f"   DEMO MODE: {'ENABLED' if DEMO_MODE else 'DISABLED'}")
         print(f"{'='*60}")
         
         # STEP 1: Validate location
@@ -123,70 +124,111 @@ def predict():
             }), 400
         
         print(f"✅ Valid location: {validation['region']}")
-        print(f"   Distance from coast: {validation['distance_from_coast']:.1f} km")
         
-        # STEP 2: Get or create vessel learner
-        print("STEP 2: Vessel learning...")
-        if vessel_id not in vessel_learners:
-            vessel_learners[vessel_id] = VesselSpeedLearner()
+        # STEP 2: Get data (DEMO MODE or REAL MODE)
+        if DEMO_MODE:
+            print("STEP 2: Loading DEMO scenario data...")
+            scenario_data = DemoScenarios.get_scenario(lat, lon)
+            
+            ocean_currents = scenario_data['ocean_currents']
+            wind_data = scenario_data['wind']
+            engine_on = scenario_data.get('engine_on', False)
+            
+            # Use demo risks directly
+            risks = scenario_data['risks']
+            
+        else:
+            print("STEP 2: Fetching REAL environmental data...")
+            ocean_currents = fetch_ocean_currents(lat, lon)
+            wind_data = fetch_wind_data(lat, lon)
+            
+            # Real vessel learning
+            if vessel_id not in vessel_learners:
+                vessel_learners[vessel_id] = VesselSpeedLearner()
+            
+            learner = vessel_learners[vessel_id]
+            learner.add_gps_point(lat, lon, datetime.now())
+            engine_on = learner.get_current_engine_status()
         
-        learner = vessel_learners[vessel_id]
-        learner.add_gps_point(lat, lon, datetime.now())
+        print(f"   Ocean current: {ocean_currents['magnitude']:.2f} m/s")
+        print(f"   Wind: {wind_data['speed']:.2f} m/s")
         
-        engine_on = learner.get_current_engine_status()
-        vessel_speed = learner.get_vessel_speed()
-        learning_status = learner.get_status_summary()
+        # STEP 3: Run drift prediction
+        print("STEP 3: Running drift model...")
         
-        print(f"   Engine status: {'ON' if engine_on else 'OFF'}")
-        print(f"   Vessel speed: {vessel_speed:.1f} km/h")
-        print(f"   Learning confidence: {learning_status['confidence']}")
+        drift_multiplier = scenario_data.get('drift_multiplier', 1.0) if DEMO_MODE else 1.0
         
-        # STEP 3: Fetch environmental data
-        print("STEP 3: Fetching environmental data...")
-        ocean_currents = fetch_ocean_currents(lat, lon)
-        wind_data = fetch_wind_data(lat, lon)
-        
-        print(f"   Ocean current: {ocean_currents['magnitude']:.2f} m/s @ {ocean_currents['direction']:.0f}°")
-        print(f"   Wind: {wind_data['speed']:.2f} m/s @ {wind_data['direction']:.0f}°")
-        
-        # STEP 4: Run drift prediction
-        print("STEP 4: Running drift model...")
+        # Modify drift model for demo scenarios
         trajectory = drift_model.predict_drift(
             lat, lon, duration_hours,
             ocean_currents, wind_data,
             engine_on=engine_on
         )
         
+        # Apply drift multiplier for demo
+        if DEMO_MODE and drift_multiplier != 1.0:
+            trajectory = [
+                (
+                    lat + (t[0] - lat) * drift_multiplier,
+                    lon + (t[1] - lon) * drift_multiplier,
+                    t[2]
+                )
+                for t in trajectory
+            ]
+        
         print(f"   ✅ Generated {len(trajectory)} trajectory points")
         
-        # STEP 5: Assess all risks
-        print("STEP 5: Assessing risks...")
-        risks = risk_assessment.assess_all_risks(trajectory)
+        # STEP 4: Risk assessment
+        print("STEP 4: Assessing risks...")
+        
+        if not DEMO_MODE:
+            risks = risk_assessment.assess_all_risks(trajectory)
         
         print(f"   Total risk score: {risks['total_risk_score']}/100")
         
-        detected_hazards = [k for k, v in risks.items() 
-                           if isinstance(v, dict) and v.get('detected')]
-        if detected_hazards:
-            print(f"   ⚠️ Detected hazards: {', '.join(detected_hazards)}")
-        else:
-            print("   ✅ No hazards detected")
-        
-        # STEP 6: Compute escape routes if high risk
+        # STEP 5: Compute escape routes if needed
         escape_routes = None
-        if risks['total_risk_score'] > 50:
-            print("STEP 6: Computing escape routes...")
-            escape_routes = route_optimizer.compute_escape_routes(
-                lat, lon, vessel_speed, risks,
-                ocean_currents, wind_data
-            )
-            print(f"   ✅ Generated 3 escape route options")
-        else:
-            print("STEP 6: Skipped (risk score < 50)")
         
-        # STEP 7: Format response
+        if DEMO_MODE:
+            needs_routes = scenario_data.get('escape_routes_needed', False)
+            emergency_mode = scenario_data.get('emergency_mode', False)
+        else:
+            needs_routes = risks['total_risk_score'] > 50
+            emergency_mode = False
+        
+        if needs_routes:
+            print("STEP 5: Computing escape routes...")
+            
+            vessel_speed = 15.0  # Default for demo
+            
+            if emergency_mode:
+                # Return emergency fallback
+                escape_routes = route_optimizer.emergency_fallback(lat, lon)
+            else:
+                escape_routes = route_optimizer.compute_escape_routes(
+                    lat, lon, vessel_speed, risks,
+                    ocean_currents, wind_data
+                )
+            print(f"   ✅ Generated escape route options")
+        else:
+            print("STEP 5: Skipped (risk score < 50)")
+        
+        # STEP 6: Vessel status (demo or real)
+        if DEMO_MODE:
+            learning_status = {
+                'total_points': 50,
+                'learned_engine_speed': 14.5,
+                'learned_drift_speed': 1.2,
+                'confidence': 'high',
+                'engine_currently_on': engine_on
+            }
+        else:
+            learning_status = learner.get_status_summary()
+        
+        # Format response
         response = {
             'status': 'success',
+            'demo_mode': DEMO_MODE,
             'location_validation': validation,
             'vessel_status': learning_status,
             'environmental_data': {
@@ -221,8 +263,6 @@ def predict():
             'status': 'error',
             'message': str(e)
         }), 500
-
-
 @app.route('/api/vessel-status', methods=['POST'])
 def vessel_status():
     """Get vessel learning status"""

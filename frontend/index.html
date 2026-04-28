@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AEGISNET 2.0 - Maritime Intelligence</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Landing Screen -->
+    <div id="landing-screen">
+        <div class="landing-content">
+            <p class="landing-subtitle">Neutral Nodes presents</p>
+            <h1 class="landing-title">AEGISNET 2.0</h1>
+            <p class="landing-description">Autonomous Ocean Decision Intelligence System</p>
+            <button id="enter-btn">INITIATE SYSTEM</button>
+        </div>
+    </div>
+
+    <!-- Main Map Container -->
+    <div id="map"></div>
+
+    <!-- TOP BAR - System Status -->
+    <div id="top-bar" class="navy-theme">
+        <div class="top-bar-left">
+            <span class="system-name">🌊 AEGISNET 2.0</span>
+            <span class="position-badge" id="position-badge">--</span>
+        </div>
+        <div class="top-bar-right">
+            <div class="status-indicator" id="location-indicator">
+                <span class="indicator-label">LOCATION:</span>
+                <span class="indicator-value" id="location-status">STANDBY</span>
+            </div>
+            <div class="status-indicator" id="risk-indicator">
+                <span class="indicator-label">RISK:</span>
+                <span class="indicator-value risk-low" id="risk-display">--</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- LEFT PANEL - Intelligence (Collapsible) -->
+    <div id="left-panel" class="side-panel navy-theme">
+        <div class="panel-header" onclick="togglePanel('left-panel')">
+            <span>📊 INTELLIGENCE LAYER</span>
+            <span class="collapse-icon">▼</span>
+        </div>
+        <div class="panel-content">
+            <!-- Location Info -->
+            <div class="info-group">
+                <div class="info-title">LOCATION</div>
+                <div class="info-row">
+                    <span class="info-label">Zone:</span>
+                    <span class="info-value" id="zone-name">--</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">From Coast:</span>
+                    <span class="info-value" id="coast-dist">-- km</span>
+                </div>
+            </div>
+
+            <!-- Vessel Info -->
+            <div class="info-group">
+                <div class="info-title">VESSEL</div>
+                <div class="info-row">
+                    <span class="info-label">Engine:</span>
+                    <span class="info-value" id="engine-state">--</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Speed:</span>
+                    <span class="info-value" id="vessel-speed">--</span>
+                </div>
+            </div>
+
+            <!-- Hazards -->
+            <div class="info-group" id="hazard-group" style="display: none;">
+                <div class="info-title">⚠️ ACTIVE HAZARDS</div>
+                <div id="hazard-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- RIGHT PANEL - Controls & Routes (Collapsible) -->
+    <div id="right-panel" class="side-panel navy-theme right">
+        <div class="panel-header" onclick="togglePanel('right-panel')">
+            <span>🎮 CONTROLS</span>
+            <span class="collapse-icon">▼</span>
+        </div>
+        <div class="panel-content">
+            <!-- Position Input -->
+            <div class="control-section">
+                <label class="control-label">Vessel Position</label>
+                <input type="number" id="vessel-lat" step="0.0001" placeholder="Latitude" class="control-input">
+                <input type="number" id="vessel-lon" step="0.0001" placeholder="Longitude" class="control-input">
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="control-section">
+                <button id="run-btn" class="action-btn primary">
+                    <span class="btn-icon">🎯</span>
+                    <span>RUN PREDICTION</span>
+                </button>
+                <button id="scenario-btn" class="action-btn secondary">
+                    <span class="btn-icon">🎬</span>
+                    <span>DEMO SCENARIOS</span>
+                </button>
+                <button id="reset-btn" class="action-btn tertiary">
+                    <span class="btn-icon">🔄</span>
+                    <span>RESET SYSTEM</span>
+                </button>
+            </div>
+
+            <!-- Escape Routes (Shows when needed) -->
+            <div id="route-section" class="control-section hidden">
+                <div class="section-title">🧭 ESCAPE ROUTES</div>
+                <div id="route-cards"></div>
+            </div>
+
+            <!-- Active Navigation (Shows when route selected) -->
+            <div id="nav-section" class="control-section hidden">
+                <div class="section-title">🎯 NAVIGATION ACTIVE</div>
+                <div id="nav-compass-wrapper">
+                    <div id="nav-compass">
+                        <div class="compass-needle">↑</div>
+                        <div class="compass-reading" id="compass-reading">--°</div>
+                        <div class="compass-direction" id="compass-direction">--</div>
+                    </div>
+                </div>
+                <div id="nav-instructions"></div>
+                <button id="stop-nav-btn" class="action-btn danger">
+                    <span class="btn-icon">⏹️</span>
+                    <span>STOP NAVIGATION</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCENARIO MODAL (Overlay) -->
+    <div id="scenario-modal" class="modal hidden">
+        <div class="modal-content navy-theme">
+            <div class="modal-header">
+                <h2>🎬 DEMO SCENARIOS</h2>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="scenario-grid">
+                    <button class="scenario-card" onclick="loadScenario(1)">
+                        <div class="scenario-number">1</div>
+                        <div class="scenario-title">SAFE FISHING</div>
+                        <div class="scenario-desc">Normal conditions • No hazards</div>
+                        <div class="scenario-risk low">Risk: LOW</div>
+                    </button>
+
+                    <button class="scenario-card" onclick="loadScenario(2)">
+                        <div class="scenario-number">2</div>
+                        <div class="scenario-title">BORDER WARNING</div>
+                        <div class="scenario-desc">Drifting to Sri Lanka • 18h ETA</div>
+                        <div class="scenario-risk high">Risk: HIGH</div>
+                    </button>
+
+                    <button class="scenario-card" onclick="loadScenario(3)">
+                        <div class="scenario-number">3</div>
+                        <div class="scenario-title">CYCLONE DANGER</div>
+                        <div class="scenario-desc">Storm approaching • Critical</div>
+                        <div class="scenario-risk critical">Risk: CRITICAL</div>
+                    </button>
+
+                    <button class="scenario-card" onclick="loadScenario(4)">
+                        <div class="scenario-number">4</div>
+                        <div class="scenario-title">STRONG CURRENTS</div>
+                        <div class="scenario-desc">Fast drift • 25km in 24h</div>
+                        <div class="scenario-risk medium">Risk: MEDIUM</div>
+                    </button>
+
+                    <button class="scenario-card" onclick="loadScenario(5)">
+                        <div class="scenario-number">5</div>
+                        <div class="scenario-title">MULTIPLE HAZARDS</div>
+                        <div class="scenario-desc">Tide + Border + Current</div>
+                        <div class="scenario-risk high">Risk: HIGH</div>
+                    </button>
+
+                    <button class="scenario-card" onclick="loadScenario(6)">
+                        <div class="scenario-number">6</div>
+                        <div class="scenario-title">EMERGENCY</div>
+                        <div class="scenario-desc">No safe route • Coast Guard</div>
+                        <div class="scenario-risk critical">Risk: EMERGENCY</div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert Toast -->
+    <div id="alert-toast" class="alert-toast hidden"></div>
+
+    <!-- Leaflet.js -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Application -->
+    <script src="app.js"></script>
+</body>
+</html>
